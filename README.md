@@ -1,213 +1,108 @@
-Proyecto Final: EventFlow - Sistema Distribuido Resiliente
+EventFlow — Sistema Distribuido Resiliente
+-----
+Proyecto Final — Sistemas Distribuidos
+-------
+EventFlow es una plataforma de venta y gestión de tickets diseñada con arquitectura de microservicios, enfocada en Alta Disponibilidad y Tolerancia a Fallos.
 
-Asignatura: Sistemas Distribuidos
+Objetivo: demostrar que el sistema continúa aceptando y procesando transacciones (escrituras) y atendiendo consultas (lecturas) aun cuando la Base de Datos Principal (SPOF) se encuentra caída.
+------
+Arquitectura del Sistema
 
-1. Descripción del Proyecto
+El sistema implementa un patrón de mensajería asíncrona y caché para evitar dependencia directa de la base de datos principal.
 
-EventFlow es una plataforma de venta y gestión de tickets diseñada con una arquitectura de microservicios radicalmente enfocada en la Alta Disponibilidad y Tolerancia a Fallos.
+Componente	Rol en la Resiliencia	Tecnología
+Backend Principal	Distribución de tráfico y lógica resiliente	FastAPI (3 nodos)
+Balanceador	Distribución y health check	NGINX
+SPOF — Base de Datos Principal	Punto de fallo controlado	PostgreSQL
+Caché	Lecturas rápidas y soporte en caída	Redis
+Cola de Mensajes	Persistencia de escrituras durante caída	RabbitMQ
+Microservicio Notificaciones	Procesamiento diferido y reintentos	Python Script
+Microservicio Análisis	API para consultas analíticas	FastAPI
+Monitoreo	Métricas y paneles	Prometheus + Grafana
+Requisitos Previos
+-------
+Instalar antes de ejecutar:
 
-El objetivo principal de este proyecto es demostrar que el sistema puede continuar aceptando y procesando transacciones (Escrituras) y atendiendo consultas (Lecturas) incluso si la Base de Datos Principal (SPOF) está completamente detenida.
+Docker Desktop (con backend WSL2/Linux)
 
-Arquitectura de Despliegue
+Docker Compose
 
-La solución se basa en un patrón de mensajería asíncrona y caché que desacopla la aplicación principal del Punto Único de Fallo (SPOF).
+Python 3+
 
-Componente
+Librerías Python necesarias:
 
-Rol en la Resiliencia
+pip install requests
 
-Tecnología
+Despliegue del Sistema
 
-Backend Principal
-
-Distribuye tráfico y aplica la lógica de resiliencia.
-
-FastAPI (Python) - 3 Nodos
-
-Balanceador de Carga
-
-Distribuye el tráfico y gestiona el health check de los 3 nodos.
-
-NGINX
-
-SPOF (BD Principal)
-
-Almacenamiento crítico (Punto de Fallo intencional).
-
-PostgreSQL
-
-Caché
-
-Sirve Lecturas rápidas y mantiene la disponibilidad cuando la BD falla.
-
-Redis
-
-Cola de Mensajes
-
-Almacena y garantiza la durabilidad de las Escrituras cuando la BD falla.
-
-RabbitMQ
-
-MS 1: Notificaciones
-
-Consumidor: Escribe en la BD y se recupera automáticamente.
-
-Python Script (Resiliente)
-
-MS 2: Análisis
-
-API REST para consultas pesadas.
-
-FastAPI (Python)
-
-Monitoreo
-
-Recolección de métricas de disponibilidad y latencia.
-
-Prometheus & Grafana
-
-2. Requisitos Previos
-
-Asegúrese de tener instalado y ejecutándose:
-
-Docker Desktop (con el motor Linux/WSL2 activo).
-
-Docker Compose (Generalmente incluido en Docker Desktop).
-
-Python 3 (para ejecutar el script de prueba E2E).
-
-Librerías de Python: pip install requests
-
-3. Despliegue del Sistema
-
-El sistema se despliega utilizando un solo comando desde el directorio raíz (Distribuidos proyecto final/):
-
-3.1. Arranque Inicial
-
-Asegúrese de estar en la carpeta raíz que contiene el archivo docker-compose.yml.
-
-Ejecute el comando para construir las imágenes y levantar todos los servicios:
-
+Desde la carpeta raíz del proyecto:
+-------
+Arranque
 docker-compose up --build -d
 
 
-3.2. Endpoints y Monitoreo
+Esto iniciará los contenedores de microservicios, PostgreSQL, Redis, RabbitMQ, NGINX, Prometheus y Grafana.
+--------
+Endpoints Principales
+Servicio	URL	Descripción
+GUI Web	http://localhost/
+	Interfaz principal
+Balanceador (Health Check)	http://localhost/health
+	Estado de nodos
+RabbitMQ Dashboard	http://localhost:15672
+	Gestión de cola (guest/guest)
+Prometheus	http://localhost:9090
+	Métricas
+Grafana	http://localhost:3000
+	Dashboards (admin/admin)
+Prueba de Tolerancia a Fallos (E2E)
 
-Una vez que los 10 contenedores estén levantados:
+Este test demuestra la capacidad de realizar compras mientras la base de datos está caída.
 
-Componente
-
-Endpoint de Acceso
-
-Descripción
-
-GUI Principal
-
-http://localhost/
-
-Interfaz para la demostración visual.
-
-Balanceador (NGINX)
-
-http://localhost/health
-
-Verifica la distribución de carga.
-
-Gestión de Cola
-
-http://localhost:15672
-
-Interfaz de RabbitMQ (usuario/pass: guest/guest).
-
-Prometheus
-
-http://localhost:9090
-
-Servidor de métricas.
-
-Grafana
-
-http://localhost:3000
-
-Dashboards (user/pass: admin/admin).
-
-4. ⚔️ Prueba de Tolerancia a Fallos (Requisito Crítico)
-
-Esta prueba End-to-End (e2e_resilience_test.py) demuestra la capacidad del sistema para aceptar 5 transacciones mientras la Base de Datos está detenida y recuperar los datos automáticamente al restablecerse.
-
-4.1. Ejecución del Test E2E
-
-El script maneja los comandos de docker stop y docker start automáticamente.
-
-Ejecute la prueba desde PowerShell (o Terminal):
-
+Ejecución del Test
 python eventflow-distribuido/tests/e2e_resilience_test.py
 
+Condiciones de éxito
 
-4.2. Flujo de la Prueba y Verificación
+Detener el contenedor postgres_spof
 
-El script confirmará el ÉXITO si cumple los siguientes pasos:
+Enviar 5 peticiones POST a /purchase
 
-Detención: Detiene el contenedor postgres_spof.
+Recibir respuesta ACCEPTED_ASYNC
 
-Escritura Resiliente: Envía 5 peticiones POST a /purchase y verifica que la respuesta sea ACCEPTED_ASYNC (el sistema encola, no falla).
+Reactivar la base de datos
 
-Recuperación: Restaura el contenedor postgres_spof.
+Confirmar que el consumidor procese las 5 transacciones
 
-Verificación Final: Espera hasta que los logs del consumidor (ms-notificaciones) muestren "CONSUMER SUCCESS" 5 veces.
+Mensaje esperado:
+---------
+--- TEST E2E DE RESILIENCIA FINALIZADO CON ÉXITO ---
 
-Si el test finaliza con el mensaje: --- TEST E2E DE RESILIENCIA FINALIZADO CON ÉXITO ---, se cumple el requisito de integración/E2E.
+Pruebas Unitarias e Integración
+Módulo	Tests	Cobertura
+App Principal	3	Validaciones y cálculo de precios
+Notificaciones	2	Estructura de mensaje y lectura de cola
+Análisis	2	Ingresos y manejo de datos nulos
+Funciones comunes	2	Hashing y verificación Redis
+E2E Resiliencia	1	Compra con fallo de base de datos
 
-5. Pruebas Unitarias (CI/CD Mínimo)
+Total pruebas: 10
 
-El pipeline de CI/CD ejecutará un total de 10 pruebas, cubriendo la lógica de negocio y el flujo E2E:
+Video de Evidencia
 
-Servicio
+La demostración incluye:
 
-Test #
+Compra y consulta con base de datos operativa
 
-Lógica Cubierta
+Detención de PostgreSQL
 
-App Principal
+5 compras procesadas de forma asíncrona
 
-3
+Visualización en Grafana de caída del servicio
 
-Cálculo de precios, validación de cantidad de tickets, validación de formato JSON.
+Reactivación de BD y procesamiento en cola
 
-MS Notificaciones
+Realizado por
 
-2
-
-Construcción del cuerpo del email, verificación del parser de la cola.
-
-MS Análisis
-
-2
-
-Cálculo de ingresos totales, manejo de datos nulos en métricas.
-
-Común
-
-2
-
-Funciones de hashing de contraseñas, función de verificación de Redis UP/DOWN.
-
-Integración / E2E
-
-1
-
-Flujo completo de Compra Asíncrona bajo Fallo de BD.
-
-6. Video de Evidencia de Tolerancia a Fallos
-
-Para el requisito de video de evidencia, se demostrará el siguiente escenario utilizando la GUI (index.html):
-
-BD UP: Se realiza una Lectura y una Escritura.
-
-Simulación de Fallo: Se detiene el contenedor postgres_spof manualmente.
-
-BD DOWN: Se realizan 5 Escrituras. Se verifica en la GUI que la respuesta es ÉXITO ASÍNCRONO.
-
-Monitoreo: Se muestra en Grafana que el target de PostgreSQL está DOWN mientras los nodos de la App están UP.
-
-Recuperación: Se inicia el contenedor postgres_spof. Se muestra en los logs del consumidor cómo las 5 transacciones se procesan.
+María Medina
+Laura Malagón
