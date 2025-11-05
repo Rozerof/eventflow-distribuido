@@ -153,37 +153,3 @@
     </script>
 </body>
 </html>
-```
-eof
-
-### 2. Siguiente Tarea: Monitoreo Básico
-
-Para el requisito de Monitoreo, vamos a añadir los servicios de Prometheus y Grafana a tu `docker-compose.yml`.
-
-**Tu Tarea:** Edita el `docker-compose.yml` para añadir los siguientes servicios (puedes colocarlos al final del archivo):
-
-```yaml
-# ... (al final de docker-compose.yml) ...
-
-  # 6. Monitoreo (Prometheus)
-  prometheus:
-    image: prom/prometheus:v2.40.1
-    container_name: prometheus_server
-    volumes:
-      - ./eventflow-distribuido/prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-
-  # 7. Visualización (Grafana)
-  grafana:
-    image: grafana/grafana:9.3.2
-    container_name: grafana_dashboard
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    depends_on:
-      - prometheus
