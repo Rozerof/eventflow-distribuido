@@ -16,6 +16,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
   # 2. Caché (Redis)
   cache:
@@ -96,6 +98,10 @@ services:
     environment:
       RABBITMQ_HOST: queue
       DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: eventflow_db
+      DB_USER: user
+      DB_PASSWORD: password
     depends_on:
       queue: {condition: service_started}
       db: {condition: service_healthy} # CLAVE: Ahora espera a que la BD esté realmente lista
@@ -135,3 +141,6 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     depends_on:
       - prometheus
+volumes:
+  pgdata:
+    driver: local
