@@ -1,5 +1,9 @@
-# nginx/Dockerfile
+# Usar la imagen oficial de NGINX
 FROM nginx:alpine
-# Copia nuestro archivo de configuración al directorio de configuración de NGINX
+
+# Eliminar la configuración por defecto de NGINX
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copiar nuestra configuración personalizada y la interfaz de usuario al contenedor
 COPY nginx.conf /etc/nginx/nginx.conf
-# NGINX usará el puerto 80 por defecto
+COPY index.html /usr/share/nginx/html/index.html
