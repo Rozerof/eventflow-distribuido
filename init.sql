@@ -24,10 +24,16 @@ CREATE TABLE IF NOT EXISTS purchases (
     event_id INTEGER NOT NULL,
     quantity INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE CASCADE
 );
 
--- Insertar datos de ejemplo para las pruebas
-INSERT INTO events (id, name, description, date) VALUES (999, 'Concierto de Resiliencia', 'Un evento para probar la arquitectura Cache-Aside.', '2025-12-01T20:00:00Z') ON CONFLICT (id) DO NOTHING;
-INSERT INTO users (id, username, email, hashed_password) VALUES (1, 'testuser', 'test@example.com', '$2b$12$EixZaYVK1fsbw/WBZ3J9A.T6m2w.g2b.j2X.Yg2b.j2X.Yg2b.j2') ON CONFLICT (id) DO NOTHING;
+-- Insertar datos de ejemplo para eventos (Insertar solo si ID no existe)
+INSERT INTO events (id, name, description, date) 
+SELECT 999, 'Concierto de Resiliencia', 'Un evento para probar la arquitectura Cache-Aside.', '2025-12-01T20:00:00Z'
+WHERE NOT EXISTS (SELECT 1 FROM events WHERE id = 999);
+
+-- Insertar datos de ejemplo para usuarios (Insertar solo si ID no existe)
+INSERT INTO users (id, username, email, hashed_password) 
+SELECT 1, 'testuser', 'test@example.com', '$2b$12$EixZaYVK1fsbw/WBZ3J9A.T6m2w.g2b.j2X.Yg2b.j2X.Yg2b.j2'
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE id = 1);

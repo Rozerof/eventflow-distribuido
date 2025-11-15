@@ -5,8 +5,12 @@ import json
 import os
 import psycopg2 
 
+# OBTENER LAS VARIABLES DE ENTORNO DE DOCKER-COMPOSE
 RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST", "queue")
 DB_HOST = os.environ.get("DB_HOST", "db")
+DB_USER = os.environ.get("DB_USER", "user") # 👈 CORRECCIÓN: Leer de env
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "password") # 👈 CORRECCIÓN: Leer de env
+DB_NAME = os.environ.get("DB_NAME", "eventflow_db") # 👈 CORRECCIÓN: Leer de env
 
 # Excepción personalizada para manejar la caída de la BD
 class StopConsumingException(Exception):
@@ -22,9 +26,9 @@ def get_db_connection():
         try:
             conn = psycopg2.connect(
                 host=DB_HOST,
-                database="eventflow_db",
-                user="user",
-                password="password",
+                database=DB_NAME, # 👈 Usar variable de entorno
+                user=DB_USER, # 👈 Usar variable de entorno
+                password=DB_PASSWORD, # 👈 Usar variable de entorno
                 connect_timeout=2 # Un timeout de conexión un poco más largo
             )
             print("CONSUMER INFO: Conexión a la BD exitosa.")

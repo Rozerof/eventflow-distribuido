@@ -15,7 +15,7 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./db-init:/docker-entrypoint-initdb.d # CLAVE: Ejecuta scripts SQL al iniciar
+      - ./db-init:/docker-entrypoint-initdb.d
       - pgdata:/var/lib/postgresql/data
     networks:
       - eventflow-net
@@ -28,6 +28,12 @@ services:
       - "6379:6379"
     networks:
       - eventflow-net
+    healthcheck: # 👈 CORRECCIÓN: Healthcheck añadido
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   # 3. Cola de Mensajes (RabbitMQ)
   queue:
@@ -35,14 +41,13 @@ services:
     container_name: rabbitmq_queue
     ports:
       - "5672:5672"
-      - "15672:15672" # Interfaz de gestión web y métricas
+      - "15672:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 30s
       timeout: 10s
       retries: 3
     environment:
-      # Enable the prometheus plugin for metrics
       RABBITMQ_PLUGINS: "[rabbitmq_prometheus,rabbitmq_management]."
     networks:
       - eventflow-net
@@ -55,10 +60,13 @@ services:
       DB_HOST: db
       REDIS_HOST: cache
       RABBITMQ_HOST: queue
+      DB_NAME: eventflow_db
+      DB_USER: user
+      DB_PASSWORD: password
       NODE_ID: 1
     depends_on:
       db: {condition: service_healthy}
-      cache: {condition: service_started}
+      cache: {condition: service_healthy} # 👈 Espera a que Redis esté healthy
       queue: {condition: service_started}
     networks:
       - eventflow-net
@@ -70,10 +78,13 @@ services:
       DB_HOST: db
       REDIS_HOST: cache
       RABBITMQ_HOST: queue
+      DB_NAME: eventflow_db
+      DB_USER: user
+      DB_PASSWORD: password
       NODE_ID: 2
     depends_on:
       db: {condition: service_healthy}
-      cache: {condition: service_started}
+      cache: {condition: service_healthy} # 👈 Espera a que Redis esté healthy
       queue: {condition: service_started}
     networks:
       - eventflow-net
@@ -85,10 +96,13 @@ services:
       DB_HOST: db
       REDIS_HOST: cache
       RABBITMQ_HOST: queue
+      DB_NAME: eventflow_db
+      DB_USER: user
+      DB_PASSWORD: password
       NODE_ID: 3
     depends_on:
       db: {condition: service_healthy}
-      cache: {condition: service_started}
+      cache: {condition: service_healthy} # 👈 Espera a que Redis esté healthy
       queue: {condition: service_started}
     networks:
       - eventflow-net
@@ -103,9 +117,9 @@ services:
       - app-node-1
       - app-node-2
       - app-node-3
-    volumes:
-      # Monta la carpeta de nginx que contiene el index.html principal
-      - ./nginx:/usr/share/nginx/html
+    volumes: # CORREGIDO: Usar solo un bloque 'volumes' y montar archivos específicos
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/index.html:/usr/share/nginx/html/index.html:ro
     networks:
       - eventflow-net
     
@@ -113,7 +127,7 @@ services:
   ms-notificaciones:
     build: ./microservicio-1
     container_name: ms_notificaciones
-    restart: always # CLAVE: Asegura la disponibilidad del consumidor tras fallo de BD
+    restart: always
     environment:
       RABBITMQ_HOST: queue
       DB_HOST: db
@@ -123,7 +137,8 @@ services:
       DB_PASSWORD: password
     depends_on:
       queue: {condition: service_started}
-      db: {condition: service_healthy} # CLAVE: Ahora espera a que la BD esté realmente lista
+      db: {condition: service_healthy}
+      cache: {condition: service_healthy} # 👈 Dependencia añadida para Redis
     networks:
       - eventflow-net
 
@@ -147,12 +162,12 @@ services:
     container_name: ms_auth
     restart: on-failure
     ports:
-      - "8081:8001" # Expone el servicio de autenticación
+      - "8081:8001"
     environment:
-      DB_HOST: db # These variables are likely used by your app
-      DB_NAME: eventflow_db # Ensure they match what your code expects
-      DB_USER: user #
-      DB_PASSWORD: password #
+      DB_HOST: db
+      DB_NAME: eventflow_db
+      DB_USER: user
+      DB_PASSWORD: password
     depends_on:
       db: {condition: service_healthy}
     networks:
@@ -164,7 +179,7 @@ services:
     container_name: ms_consumer
     restart: on-failure
     ports:
-      - "8001:8001" # Expone el puerto de métricas para Prometheus
+      - "8001:8001"
     environment:
       RABBITMQ_HOST: queue
       DB_HOST: db
@@ -174,10 +189,11 @@ services:
     depends_on:
       queue: {condition: service_started}
       db: {condition: service_healthy}
+      cache: {condition: service_healthy} # 👈 Dependencia añadida para Redis
     networks:
       - eventflow-net
 
-  # 8. Monitoreo (Prometheus)
+  # 10. Monitoreo (Prometheus)
   prometheus:
     image: prom/prometheus:v2.40.1
     container_name: prometheus_server
@@ -194,7 +210,7 @@ services:
     networks:
       - eventflow-net
       
-  # 9. Visualización (Grafana)
+  # 11. Visualización (Grafana)
   grafana:
     image: grafana/grafana:9.3.2
     container_name: grafana_dashboard
@@ -204,7 +220,6 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
-      # Mapea los archivos de provisioning para autoconfigurar datasources y dashboards
       - ./grafana/provisioning:/etc/grafana/provisioning
     depends_on:
       - prometheus

@@ -6,6 +6,11 @@ import time
 
 # --- Configuración del Entorno ---
 DB_HOST = os.environ.get("DB_HOST", "db")
+# 👈 CORRECCIÓN AÑADIDA: Leer credenciales de DB
+DB_USER = os.environ.get("DB_USER", "user")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "password")
+DB_NAME = os.environ.get("DB_NAME", "eventflow_db")
+# -------------------------------------
 
 app = FastAPI(
     title="Microservicio de Análisis de Eventos",
@@ -15,13 +20,15 @@ app = FastAPI(
 
 # Función para obtener la conexión a PostgreSQL
 def get_db_connection():
-    # ... (código de conexión) ...
+    """
+    Intenta conectar a la BD usando las variables de entorno.
+    """
     try:
         conn = psycopg2.connect(
             host=DB_HOST,
-            database="eventflow_db",
-            user="user",
-            password="password",
+            database=DB_NAME, # 👈 CORREGIDO: Uso de variable de entorno
+            user=DB_USER, # 👈 CORREGIDO: Uso de variable de entorno
+            password=DB_PASSWORD, # 👈 CORREGIDO: Uso de variable de entorno
             connect_timeout=3
         )
         return conn
@@ -32,7 +39,6 @@ def get_db_connection():
 # Endpoint para la Consulta Crítica (Simulación de consulta pesada)
 @app.get("/metrics/sales-summary")
 def get_sales_summary():
-    # ... (código de simulación de consulta) ...
     conn = get_db_connection()
     if conn is None:
         raise HTTPException(status_code=503, detail="Database connection required for analysis.")
