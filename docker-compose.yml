@@ -1,0 +1,220 @@
+services:
+  # 1. Base de Datos (SPOF)
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_spof
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: eventflow_db
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./db-init:/docker-entrypoint-initdb.d # CLAVE: Ejecuta scripts SQL al iniciar
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - eventflow-net
+
+  # 2. Caché (Redis)
+  cache:
+    image: redis:7-alpine
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    networks:
+      - eventflow-net
+
+  # 3. Cola de Mensajes (RabbitMQ)
+  queue:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq_queue
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Interfaz de gestión web y métricas
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    environment:
+      # Enable the prometheus plugin for metrics
+      RABBITMQ_PLUGINS: "[rabbitmq_prometheus,rabbitmq_management]."
+    networks:
+      - eventflow-net
+    
+  # 4. Aplicación Principal (3 Nodos)
+  app-node-1:
+    build: ./app-principal
+    container_name: app_node_1
+    environment:
+      DB_HOST: db
+      REDIS_HOST: cache
+      RABBITMQ_HOST: queue
+      NODE_ID: 1
+    depends_on:
+      db: {condition: service_healthy}
+      cache: {condition: service_started}
+      queue: {condition: service_started}
+    networks:
+      - eventflow-net
+    
+  app-node-2:
+    build: ./app-principal
+    container_name: app_node_2
+    environment:
+      DB_HOST: db
+      REDIS_HOST: cache
+      RABBITMQ_HOST: queue
+      NODE_ID: 2
+    depends_on:
+      db: {condition: service_healthy}
+      cache: {condition: service_started}
+      queue: {condition: service_started}
+    networks:
+      - eventflow-net
+      
+  app-node-3:
+    build: ./app-principal
+    container_name: app_node_3
+    environment:
+      DB_HOST: db
+      REDIS_HOST: cache
+      RABBITMQ_HOST: queue
+      NODE_ID: 3
+    depends_on:
+      db: {condition: service_healthy}
+      cache: {condition: service_started}
+      queue: {condition: service_started}
+    networks:
+      - eventflow-net
+
+  # 5. Balanceador de Carga (NGINX)
+  balancer:
+    build: ./nginx
+    container_name: nginx_balancer
+    ports:
+      - "8080:80"
+    depends_on:
+      - app-node-1
+      - app-node-2
+      - app-node-3
+    volumes:
+      # Monta la carpeta de nginx que contiene el index.html principal
+      - ./nginx:/usr/share/nginx/html
+    networks:
+      - eventflow-net
+    
+  # 6. Microservicio 1: Notificaciones (Consumidor Resiliente)
+  ms-notificaciones:
+    build: ./microservicio-1
+    container_name: ms_notificaciones
+    restart: always # CLAVE: Asegura la disponibilidad del consumidor tras fallo de BD
+    environment:
+      RABBITMQ_HOST: queue
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: eventflow_db
+      DB_USER: user
+      DB_PASSWORD: password
+    depends_on:
+      queue: {condition: service_started}
+      db: {condition: service_healthy} # CLAVE: Ahora espera a que la BD esté realmente lista
+    networks:
+      - eventflow-net
+
+  # 7. Microservicio 2: Análisis (API REST)
+  ms-analisis:
+    build: ./microservicio-2
+    container_name: ms_analisis
+    environment:
+      DB_HOST: db
+      DB_NAME: eventflow_db
+      DB_USER: user
+      DB_PASSWORD: password
+    depends_on:
+      db: {condition: service_healthy}
+    networks:
+      - eventflow-net
+      
+  # 8. Microservicio 3: Autenticación (API REST)
+  ms-auth:
+    build: ./ms-auth
+    container_name: ms_auth
+    restart: on-failure
+    ports:
+      - "8081:8001" # Expone el servicio de autenticación
+    environment:
+      DB_HOST: db # These variables are likely used by your app
+      DB_NAME: eventflow_db # Ensure they match what your code expects
+      DB_USER: user #
+      DB_PASSWORD: password #
+    depends_on:
+      db: {condition: service_healthy}
+    networks:
+      - eventflow-net
+
+  # 9. Microservicio 4: Consumidor de Compras (Worker)
+  ms-consumer:
+    build: ./ms-consumer
+    container_name: ms_consumer
+    restart: on-failure
+    ports:
+      - "8001:8001" # Expone el puerto de métricas para Prometheus
+    environment:
+      RABBITMQ_HOST: queue
+      DB_HOST: db
+      DB_NAME: eventflow_db
+      DB_USER: user
+      DB_PASSWORD: password
+    depends_on:
+      queue: {condition: service_started}
+      db: {condition: service_healthy}
+    networks:
+      - eventflow-net
+
+  # 8. Monitoreo (Prometheus)
+  prometheus:
+    image: prom/prometheus:v2.40.1
+    container_name: prometheus_server
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - db
+      - queue
+      - balancer
+    networks:
+      - eventflow-net
+      
+  # 9. Visualización (Grafana)
+  grafana:
+    image: grafana/grafana:9.3.2
+    container_name: grafana_dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      # Mapea los archivos de provisioning para autoconfigurar datasources y dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - eventflow-net
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  eventflow-net:
+    driver: bridge

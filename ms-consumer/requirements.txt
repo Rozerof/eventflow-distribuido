@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+pika # Para conectarse con RabbitMQ
+psycopg2-binary # Para conectarse con PostgreSQL
+prometheus-fastapi-instrumentator # Para exponer métricas a Prometheus

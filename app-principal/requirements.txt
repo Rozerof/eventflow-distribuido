@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pika
+psycopg2-binary
+redis
+python-jose[cryptography]
+passlib[bcrypt]
+prometheus-fastapi-instrumentator

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EventFlow - Sistema Distribuido Resiliente</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f7f7f7; }
+        .card { transition: all 0.3s ease; }
+        .success { background-color: #d1fae5; color: #065f46; }
+        .warning { background-color: #fef3c7; color: #b45309; }
+        .error { background-color: #fee2e2; color: #991b1b; }
+        .modal-overlay { background-color: rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body class="p-8">
+
+    <div class="max-w-4xl mx-auto space-y-8">
+        <!-- HEADER -->
+        <header class="flex justify-between items-center mb-6 pb-2 border-b-4 border-indigo-600">
+            <h1 class="text-4xl font-extrabold text-gray-900">
+                EventFlow
+            </h1>
+            <div id="auth-section">
+                <button onclick="showLoginModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                    Iniciar Sesión / Registrarse
+                </button>
+            </div>
+        </header>
+
+        <p class="text-gray-600">
+            Esta interfaz demuestra la alta disponibilidad y la tolerancia a fallos ante la caída de la Base de Datos (SPOF).
+        </p>
+
+        <!-- PANELES DE ESTADO -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div id="status-balanceador" class="card p-4 rounded-lg shadow-lg border-l-4 border-indigo-500 bg-white">
+                <p class="text-sm font-medium text-gray-500">Nodo Activo (Balanceo)</p>
+                <p id="node-response" class="text-2xl font-bold text-indigo-600">Cargando...</p>
+            </div>
+            <div id="status-cache" class="card p-4 rounded-lg shadow-lg border-l-4 border-yellow-500 bg-white">
+                <p class="text-sm font-medium text-gray-500">Fuente de Lectura</p>
+                <p id="read-source" class="text-2xl font-bold text-yellow-600">N/A</p>
+            </div>
+            <div id="status-bd" class="card p-4 rounded-lg shadow-lg border-l-4 border-red-500 bg-white">
+                <p class="text-sm font-medium text-gray-500">Estado del SPOF (BD)</p>
+                <p id="db-status" class="text-sm font-bold text-red-600">Desconocido</p>
+            </div>
+        </div>
+
+        <!-- SECCIÓN DE PRUEBAS -->
+        <div class="space-y-4 pt-4">
+            <h2 class="text-2xl font-bold text-gray-700">Pruebas de Resiliencia</h2>
+
+            <!-- PRUEBA 1: LECTURA RESILIENTE -->
+            <div class="card p-6 bg-white rounded-lg shadow-md border-t-8 border-yellow-300">
+                <h3 class="text-xl font-semibold mb-2">1. Leer Datos (Cache-Aside)</h3>
+                <p class="text-gray-600 mb-4">Consulta el Evento 999. Si la BD cae, el resultado debe venir del Cache (REDIS).</p>
+                <button onclick="readEvent(999)" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                    Consultar Evento 999
+                </button>
+                <div id="read-result" class="mt-4 p-3 text-sm rounded-lg warning hidden"></div>
+            </div>
+
+            <!-- PRUEBA 2: ESCRITURA ASÍNCRONA -->
+            <div class="card p-6 bg-white rounded-lg shadow-md border-t-8 border-green-300">
+                <h3 class="text-xl font-semibold mb-2">2. Comprar Ticket (Escritura Asíncrona)</h3>
+                <p class="text-gray-600 mb-4">Envía una transacción a la cola (RabbitMQ). El sistema acepta la petición inmediatamente, incluso si la BD está caída.</p>
+                
+                <div class="space-y-2 max-w-sm mb-4">
+                    <input type="number" id="user-id" placeholder="User ID (Ej: 1)" value="1" class="w-full p-2 border rounded-md">
+                    <input type="number" id="event-id" placeholder="Event ID (Ej: 101)" value="101" class="w-full p-2 border rounded-md">
+                    <input type="number" id="quantity" placeholder="Cantidad (Ej: 2)" value="2" class="w-full p-2 border rounded-md">
+                </div>
+
+                <button onclick="createPurchase()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                    Enviar Compra (POST)
+                </button>
+                <div id="write-result" class="mt-4 p-3 text-sm rounded-lg success hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE AUTENTICACIÓN -->
+    <div id="login-modal" class="fixed inset-0 z-50 items-center justify-center hidden p-4 modal-overlay">
+        <div id="login-modal-content" class="bg-white rounded-lg shadow-2xl w-full max-w-md mx-auto">
+            <!-- Formulario de Login -->
+            <div id="login-view">
+                <form onsubmit="handleLogin(event)" class="p-8 space-y-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Iniciar Sesión</h2>
+                    <input type="text" id="login-username" placeholder="Nombre de usuario" required class="w-full p-3 border rounded-md">
+                    <input type="password" id="login-password" placeholder="Contraseña" required class="w-full p-3 border rounded-md">
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        Entrar
+                    </button>
+                    <p class="text-center text-sm text-gray-600">
+                        ¿No tienes cuenta? <a href="#" onclick="toggleAuthView(event)" class="font-medium text-indigo-600 hover:underline">Crea una aquí</a>
+                    </p>
+                </form>
+            </div>
+            <!-- Formulario de Registro -->
+            <div id="signup-view" class="hidden">
+                <form onsubmit="handleSignup(event)" class="p-8 space-y-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Crear Cuenta</h2>
+                    <input type="text" id="signup-username" placeholder="Nombre de usuario" required class="w-full p-3 border rounded-md">
+                    <input type="email" id="signup-email" placeholder="Correo electrónico" required class="w-full p-3 border rounded-md">
+                    <input type="password" id="signup-password" placeholder="Contraseña" required class="w-full p-3 border rounded-md">
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        Registrarse
+                    </button>
+                    <p class="text-center text-sm text-gray-600">
+                        ¿Ya tienes cuenta? <a href="#" onclick="toggleAuthView(event)" class="font-medium text-indigo-600 hover:underline">Inicia sesión</a>
+                    </p>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080';
+        const AUTH_API_BASE = 'http://localhost:8081';
+        let currentUser = null; // { id, username }
+
+        // --- Control de la Modal de Autenticación ---
+        const loginModal = document.getElementById('login-modal');
+        const loginView = document.getElementById('login-view');
+        const signupView = document.getElementById('signup-view');
+
+        function showLoginModal() {
+            loginModal.classList.remove('hidden');
+            loginModal.classList.add('flex');
+        }
+
+        function hideLoginModal() {
+            loginModal.classList.add('hidden');
+            loginModal.classList.remove('flex');
+        }
+
+        function toggleAuthView(event) {
+            event.preventDefault();
+            loginView.classList.toggle('hidden');
+            signupView.classList.toggle('hidden');
+        }
+
+        // Cierra la modal si se hace clic en el overlay
+        loginModal.addEventListener('click', (event) => {
+            if (event.target === loginModal) {
+                hideLoginModal();
+            }
+        });
+
+        // --- Lógica de Autenticación (Real) ---
+        async function handleLogin(event) {
+            event.preventDefault();
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const response = await fetch(`${AUTH_API_BASE}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Error al iniciar sesión');
+
+                localStorage.setItem('authToken', data.access_token);
+                localStorage.setItem('user', JSON.stringify({ id: data.user_id, username: data.username }));
+                
+                checkSession();
+                hideLoginModal();
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        async function handleSignup(event) {
+            event.preventDefault();
+            const username = document.getElementById('signup-username').value;
+            const email = document.getElementById('signup-email').value;
+            const password = document.getElementById('signup-password').value;
+
+            try {
+                const response = await fetch(`${AUTH_API_BASE}/signup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Error al registrarse');
+
+                localStorage.setItem('authToken', data.access_token);
+                localStorage.setItem('user', JSON.stringify({ id: data.user_id, username: data.username }));
+
+                checkSession();
+                hideLoginModal();
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        function handleLogout() {
+            currentUser = null;
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('user');
+            updateAuthUI();
+        }
+
+        function checkSession() {
+            const user = localStorage.getItem('user');
+            if (user) currentUser = JSON.parse(user);
+            updateAuthUI();
+        }
+
+        function updateAuthUI() {
+            const authSection = document.getElementById('auth-section');
+            const userIdInput = document.getElementById('user-id');
+
+            if (currentUser) {
+                authSection.innerHTML = `
+                    <div class="flex items-center gap-4">
+                        <span class="font-medium text-gray-700">Hola, ${currentUser.username}</span>
+                        <button onclick="handleLogout()" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg">
+                            Cerrar Sesión
+                        </button>
+                    </div>
+                `;
+                userIdInput.value = currentUser.id;
+                userIdInput.disabled = true;
+            } else {
+                authSection.innerHTML = `
+                    <button onclick="showLoginModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        Iniciar Sesión / Registrarse
+                    </button>
+                `;
+                userIdInput.value = '';
+                userIdInput.disabled = false;
+            }
+        }
+
+        // --- Lógica de la Aplicación Principal ---
+        async function fetchNodeStatus() {
+            try {
+                const response = await fetch(API_BASE + '/');
+                const data = await response.json();
+                document.getElementById('node-response').textContent = `Nodo ${data.message.split(' ')[2]}`;
+                document.getElementById('status-balanceador').classList.add('bg-green-100');
+                document.getElementById('db-status').textContent = 'BD UP (Asumido)';
+                document.getElementById('db-status').classList.remove('text-red-600');
+                document.getElementById('db-status').classList.add('text-green-600');
+            } catch (error) {
+                document.getElementById('node-response').textContent = 'ERROR/Caído';
+                document.getElementById('status-balanceador').classList.add('bg-red-100');
+                document.getElementById('db-status').textContent = 'BD DOWN (o Nodos Caídos)';
+            }
+        }
+
+        async function readEvent(id) {
+            const resultDiv = document.getElementById('read-result');
+            resultDiv.classList.add('hidden');
+            document.getElementById('read-source').textContent = 'Consultando...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/events/${id}`);
+                const data = await response.json();
+                
+                // Actualiza el origen de la lectura
+                document.getElementById('read-source').textContent = data.source.toUpperCase();
+
+                resultDiv.textContent = `ÉXITO: Evento ${data.event.id} - ${data.event.name}. Fuente: ${data.source.toUpperCase()}.`;
+                resultDiv.className = resultDiv.className.replace(/warning|success|error/g, data.source === 'cache' ? 'warning' : 'success');
+
+            } catch (error) {
+                // Captura el error 503 (DB Down + Cache Miss)
+                document.getElementById('read-source').textContent = 'FALLO TOTAL';
+                resultDiv.textContent = 'CRÍTICO: No se pudo leer el evento. La BD está caída Y la caché está vacía (Cache Miss).';
+                resultDiv.className = resultDiv.className.replace(/warning|success|error/g, 'error');
+            }
+            resultDiv.classList.remove('hidden');
+        }
+
+        async function createPurchase() {
+            // **Punto de control de autenticación**
+            if (!currentUser) {
+                showLoginModal();
+                return; // Detiene la ejecución si no está autenticado
+            }
+
+            const eventId = document.getElementById('event-id').value;
+            const quantity = document.getElementById('quantity').value;
+            const token = localStorage.getItem('authToken');
+            
+            const resultDiv = document.getElementById('write-result');
+            resultDiv.classList.add('hidden');
+            resultDiv.textContent = 'Enviando transacción a la cola...';
+
+            try {
+                const response = await fetch(`${API_BASE}/purchase?event_id=${eventId}&quantity=${quantity}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}` // <-- ENVIAR TOKEN
+                    }
+                });
+                
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Error en la petición de compra.');
+                }
+
+                if (data.status === 'ACCEPTED_ASYNC') {
+                    // Si recibimos ACCEPTED_ASYNC, la transacción fue encolada con éxito.
+                    resultDiv.textContent = `ÉXITO ASÍNCRONO: Transacción ${data.transaction_id} aceptada y encolada. El consumidor escribirá en BD al recuperarse.`;
+                    resultDiv.className = resultDiv.className.replace(/warning|success|error/g, 'success');
+                } else {
+                    resultDiv.textContent = `Error: ${data.detail || JSON.stringify(data)}`;
+                    resultDiv.className = resultDiv.className.replace(/warning|success|error/g, 'error');
+                }
+
+            } catch (error) {
+                // Error de conexión total (si RabbitMQ también falla)
+                resultDiv.textContent = `ERROR CRÍTICO: Falló la conexión al backend/cola. ${error.message}`;
+                resultDiv.className = resultDiv.className.replace(/warning|success|error/g, 'error');
+            }
+            resultDiv.classList.remove('hidden');
+        }
+
+        // Ejecutar al cargar la página
+        fetchNodeStatus();
+        checkSession(); // Revisa si hay una sesión activa al cargar la página
+    </script>
+</body>
+</html>
