@@ -1,0 +1,36 @@
+name: EventFlow CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      # Instala las dependencias del backend para los tests unitarios
+      run: |
+        pip install poetry # Si usas poetry, o usa pip como sigue
+        pip install -r app-principal/requirements.txt
+
+    - name: Run Unit Tests
+      # Placeholder: Aquí se ejecutarán tus tests unitarios
+      run: |
+        echo "Ejecutando tests unitarios (Día 6)..."
+        # python -m unittest discover tests/unit
+        
+    - name: Test Docker Compose Configuration
+      # Verifica que el archivo de configuración es válido
+      run: docker-compose config

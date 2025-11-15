@@ -11,20 +11,12 @@
         .success { background-color: #d1fae5; color: #065f46; }
         .warning { background-color: #fef3c7; color: #b45309; }
         .error { background-color: #fee2e2; color: #991b1b; }
-<<<<<<< HEAD
-=======
         .modal-overlay { background-color: rgba(0,0,0,0.5); }
->>>>>>> login-en-proceso
     </style>
 </head>
 <body class="p-8">
 
     <div class="max-w-4xl mx-auto space-y-8">
-<<<<<<< HEAD
-        <h1 class="text-4xl font-extrabold text-gray-900 mb-6 border-b-4 border-indigo-600 pb-2">
-            EventFlow: Arquitectura Resiliente
-        </h1>
-=======
         <!-- HEADER -->
         <header class="flex justify-between items-center mb-6 pb-2 border-b-4 border-indigo-600">
             <h1 class="text-4xl font-extrabold text-gray-900">
@@ -37,7 +29,6 @@
             </div>
         </header>
 
->>>>>>> login-en-proceso
         <p class="text-gray-600">
             Esta interfaz demuestra la alta disponibilidad y la tolerancia a fallos ante la caída de la Base de Datos (SPOF).
         </p>
@@ -91,11 +82,6 @@
         </div>
     </div>
 
-<<<<<<< HEAD
-    <script>
-        const API_BASE = 'http://localhost';
-
-=======
     <!-- MODAL DE AUTENTICACIÓN -->
     <div id="login-modal" class="fixed inset-0 z-50 items-center justify-center hidden p-4 modal-overlay">
         <div id="login-modal-content" class="bg-white rounded-lg shadow-2xl w-full max-w-md mx-auto">
@@ -105,7 +91,7 @@
                     <h2 class="text-2xl font-bold text-gray-800">Iniciar Sesión</h2>
                     <input type="text" id="login-username" placeholder="Nombre de usuario" required class="w-full p-3 border rounded-md">
                     <input type="password" id="login-password" placeholder="Contraseña" required class="w-full p-3 border rounded-md">
-                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md">
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
                         Entrar
                     </button>
                     <p class="text-center text-sm text-gray-600">
@@ -120,7 +106,7 @@
                     <input type="text" id="signup-username" placeholder="Nombre de usuario" required class="w-full p-3 border rounded-md">
                     <input type="email" id="signup-email" placeholder="Correo electrónico" required class="w-full p-3 border rounded-md">
                     <input type="password" id="signup-password" placeholder="Contraseña" required class="w-full p-3 border rounded-md">
-                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-md">
+                    <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
                         Registrarse
                     </button>
                     <p class="text-center text-sm text-gray-600">
@@ -132,30 +118,14 @@
     </div>
 
     <script>
-		const API_BASE_URL = 'http://localhost:8080'; // NGINX Balancer
-		const AUTH_API_BASE = API_BASE_URL + '/auth-api'; // ✅ CORREGIDO: Usar NGINX para routing
+        const API_BASE = 'http://localhost:8080';
+        const AUTH_API_BASE = 'http://localhost:8081';
+        let currentUser = null; // { id, username }
 
-		// Elementos del DOM
-		const eventsListEl = document.getElementById('events-list');
-		const seatMapContainerEl = document.getElementById('seat-map-container');
-		const seatMapEl = document.getElementById('seat-map');
-		const eventTitleEl = document.getElementById('event-title');
-		const actionsContainerEl = document.getElementById('actions-container');
-		const statusMessageEl = document.getElementById('status-message');
-
-		// Elementos de la Modal
+        // --- Control de la Modal de Autenticación ---
         const loginModal = document.getElementById('login-modal');
         const loginView = document.getElementById('login-view');
         const signupView = document.getElementById('signup-view');
-
-		// Estado de la aplicación
-		let currentUser = null; // { id, username }
-		let selectedEvent = null;
-		let selectedSeats = new Set();
-		let currentLock = null;
-		let countdownInterval = null;
-
-		// --- LÓGICA DE AUTENTICACIÓN ---
 
         function showLoginModal() {
             loginModal.classList.remove('hidden');
@@ -174,10 +144,13 @@
         }
 
         // Cierra la modal si se hace clic en el overlay
-		loginModal.addEventListener('click', (event) => {
-			if (event.target === loginModal) hideLoginModal();
-		});
+        loginModal.addEventListener('click', (event) => {
+            if (event.target === loginModal) {
+                hideLoginModal();
+            }
+        });
 
+        // --- Lógica de Autenticación (Real) ---
         async function handleLogin(event) {
             event.preventDefault();
             const username = document.getElementById('login-username').value;
@@ -185,11 +158,9 @@
 
             try {
                 const response = await fetch(`${AUTH_API_BASE}/login`, {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-					},
-					body: JSON.stringify({ username: username, password: password })
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.detail || 'Error al iniciar sesión');
@@ -211,7 +182,6 @@
             const password = document.getElementById('signup-password').value;
 
             try {
-				// La URL ahora es http://localhost:8080/auth-api/signup
                 const response = await fetch(`${AUTH_API_BASE}/signup`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -270,7 +240,6 @@
         }
 
         // --- Lógica de la Aplicación Principal ---
->>>>>>> login-en-proceso
         async function fetchNodeStatus() {
             try {
                 const response = await fetch(API_BASE + '/');
@@ -312,11 +281,6 @@
         }
 
         async function createPurchase() {
-<<<<<<< HEAD
-            const userId = document.getElementById('user-id').value;
-            const eventId = document.getElementById('event-id').value;
-            const quantity = document.getElementById('quantity').value;
-=======
             // **Punto de control de autenticación**
             if (!currentUser) {
                 showLoginModal();
@@ -326,34 +290,25 @@
             const eventId = document.getElementById('event-id').value;
             const quantity = document.getElementById('quantity').value;
             const token = localStorage.getItem('authToken');
->>>>>>> login-en-proceso
             
             const resultDiv = document.getElementById('write-result');
             resultDiv.classList.add('hidden');
             resultDiv.textContent = 'Enviando transacción a la cola...';
 
             try {
-<<<<<<< HEAD
-                const response = await fetch(`${API_BASE}/purchase?user_id=${userId}&event_id=${eventId}&quantity=${quantity}`, {
-                    method: 'POST'
-=======
                 const response = await fetch(`${API_BASE}/purchase?event_id=${eventId}&quantity=${quantity}`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}` // <-- ENVIAR TOKEN
                     }
->>>>>>> login-en-proceso
                 });
                 
                 const data = await response.json();
 
-<<<<<<< HEAD
-=======
                 if (!response.ok) {
                     throw new Error(data.detail || 'Error en la petición de compra.');
                 }
 
->>>>>>> login-en-proceso
                 if (data.status === 'ACCEPTED_ASYNC') {
                     // Si recibimos ACCEPTED_ASYNC, la transacción fue encolada con éxito.
                     resultDiv.textContent = `ÉXITO ASÍNCRONO: Transacción ${data.transaction_id} aceptada y encolada. El consumidor escribirá en BD al recuperarse.`;
@@ -373,10 +328,7 @@
 
         // Ejecutar al cargar la página
         fetchNodeStatus();
-<<<<<<< HEAD
-=======
         checkSession(); // Revisa si hay una sesión activa al cargar la página
->>>>>>> login-en-proceso
     </script>
 </body>
 </html>
